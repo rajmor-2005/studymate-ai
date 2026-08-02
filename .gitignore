@@ -1,0 +1,31 @@
+# Python / Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.db
+*.sqlite3
+
+# Environment & Secrets
+.env
+.env.local
+backend/.env
+
+# Vector DB & Storage
+backend/chroma_db/
+chroma_db/
+backend/studymate.db
+studymate.db
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+.npm
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
