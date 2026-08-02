@@ -1,5 +1,16 @@
 import hmac
 import hashlib
+import sys
+import types
+
+try:
+    import pkg_resources
+except ImportError:
+    dummy_pkg = types.ModuleType("pkg_resources")
+    dummy_pkg.get_distribution = lambda name: types.SimpleNamespace(version="1.4.1")
+    dummy_pkg.DistributionNotFound = Exception
+    sys.modules["pkg_resources"] = dummy_pkg
+
 import razorpay
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
