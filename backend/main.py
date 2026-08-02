@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core.config import FRONTEND_URL
 from backend.core.database import engine, Base
@@ -13,7 +14,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Global Exception Handler for production logging
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    print(f"Unhandled Exception on {request.url}: {exc}\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal Server Error: {str(exc)}"}
+    )
+
 # Configure CORS (Allows all Vercel domains, custom domains, and localhost)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

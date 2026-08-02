@@ -17,5 +17,7 @@ pytest==8.2.2
 httpx==0.27.0
 numpy<2.0.0
 setuptools
+bcrypt==4.1.3
+
 
 
