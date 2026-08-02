@@ -13,21 +13,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
-origins = [
-    FRONTEND_URL,
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "*"  # Allows easy testing in development/staging
-]
-
+# Configure CORS (Allows all Vercel domains, custom domains, and localhost)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Import and include routers
 from backend.routers import auth, documents, payments, progress
