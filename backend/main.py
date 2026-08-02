@@ -30,6 +30,16 @@ app.include_router(documents.router)
 app.include_router(payments.router)
 app.include_router(progress.router)
 
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "message": "Welcome to StudyMate AI Backend API",
+        "docs_url": "/docs",
+        "health_check": "/api/health"
+    }
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "service": "StudyMate AI Backend"}
+
