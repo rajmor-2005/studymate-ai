@@ -1,6 +1,7 @@
 import pytest
 import io
 import json
+import uuid
 from datetime import date, timedelta
 import fitz
 from PIL import Image, ImageDraw
@@ -8,7 +9,7 @@ from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from backend.core.database import SessionLocal
+from backend.core.database import SessionLocal, Base, engine
 from backend.models.user import User
 from backend.models.payment import UploadUsage, Payment
 from backend.services.document_processor import (
@@ -59,11 +60,13 @@ def create_image_bytes() -> bytes:
     img.save(buf, format="PNG")
     return buf.getvalue()
 
-def create_user(email: str, tier: str = "free") -> tuple[dict, str, str]:
-    payload = {"email": email, "password": "Password123!", "name": f"User {email}"}
+def create_user(prefix: str = "user", tier: str = "free") -> tuple[dict, str, str]:
+    unique_email = f"{prefix}_{uuid.uuid4().hex[:8]}@example.com"
+    payload = {"email": unique_email, "password": "Password123!", "name": f"User {prefix}"}
     res = client.post("/api/auth/signup", json=payload)
-    token = res.json()["access_token"]
-    user_id = res.json()["user"]["id"]
+    data = res.json()
+    token = data["access_token"]
+    user_id = data["user"]["id"]
     if tier == "pro":
         db = SessionLocal()
         u = db.query(User).filter(User.id == user_id).first()
@@ -126,8 +129,9 @@ def test_06_paste_plain_text_directly():
 # ==============================================================================
 
 def test_07_signup_valid_email_password():
+    email = f"student_{uuid.uuid4().hex[:8]}@example.com"
     res = client.post("/api/auth/signup", json={
-        "email": "student07@example.com",
+        "email": email,
         "password": "Password123!",
         "name": "Student Seven"
     })
@@ -135,23 +139,26 @@ def test_07_signup_valid_email_password():
     assert "access_token" in res.json()
 
 def test_08_signup_existing_email_error():
-    payload = {"email": "dup08@example.com", "password": "Password123!", "name": "Dup User"}
+    email = f"dup_{uuid.uuid4().hex[:8]}@example.com"
+    payload = {"email": email, "password": "Password123!", "name": "Dup User"}
     client.post("/api/auth/signup", json=payload)
     res = client.post("/api/auth/signup", json=payload)
     assert res.status_code == 400
     assert "already registered" in res.json()["detail"]
 
 def test_09_login_correct_credentials():
-    payload = {"email": "user09@example.com", "password": "Password123!", "name": "User Nine"}
+    email = f"user_{uuid.uuid4().hex[:8]}@example.com"
+    payload = {"email": email, "password": "Password123!", "name": "User Nine"}
     client.post("/api/auth/signup", json=payload)
-    res = client.post("/api/auth/login", json={"email": "user09@example.com", "password": "Password123!"})
+    res = client.post("/api/auth/login", json={"email": email, "password": "Password123!"})
     assert res.status_code == 200
     assert "access_token" in res.json()
 
 def test_10_login_wrong_password_generic_error():
-    payload = {"email": "user10@example.com", "password": "Password123!", "name": "User Ten"}
+    email = f"user_{uuid.uuid4().hex[:8]}@example.com"
+    payload = {"email": email, "password": "Password123!", "name": "User Ten"}
     client.post("/api/auth/signup", json=payload)
-    res = client.post("/api/auth/login", json={"email": "user10@example.com", "password": "WrongPassword!"})
+    res = client.post("/api/auth/login", json={"email": email, "password": "WrongPassword!"})
     assert res.status_code == 401
     assert res.json()["detail"] == "Invalid email or password"
 
@@ -189,14 +196,14 @@ def test_15_generate_flashcards():
     assert "front" in cards[0] and "back" in cards[0]
 
 def test_16_chat_grounded_answerable():
-    doc_id = "test_chat_grounded_doc"
+    doc_id = f"test_chat_grounded_{uuid.uuid4().hex[:6]}"
     index_document(doc_id, SAMPLE_TEXT_EN)
     res = generate_chat_response(doc_id, "What does Newton's first law state?")
     assert "response" in res and len(res["response"]) > 10
     delete_document_index(doc_id)
 
 def test_17_chat_uncovered_out_of_scope():
-    doc_id = "test_chat_out_of_scope_doc"
+    doc_id = f"test_chat_out_of_scope_{uuid.uuid4().hex[:6]}"
     index_document(doc_id, SAMPLE_TEXT_EN)
     res = generate_chat_response(doc_id, "Who built the Taj Mahal in Agra?")
     assert "covered nahi hai" in res["response"].lower() or "not covered" in res["response"].lower() or not res["is_grounded"]
@@ -208,13 +215,13 @@ def test_17_chat_uncovered_out_of_scope():
 # ==============================================================================
 
 def test_18_free_user_three_uploads_success():
-    _, token, _ = create_user("free18@example.com", tier="free")
+    _, token, _ = create_user("free18", tier="free")
     for i in range(3):
         res = client.post("/api/documents/upload", data={"text_content": f"Material {i}"}, headers={"Authorization": f"Bearer {token}"})
         assert res.status_code == 200
 
 def test_19_free_user_fourth_upload_blocked():
-    _, token, _ = create_user("free19@example.com", tier="free")
+    _, token, _ = create_user("free19", tier="free")
     for i in range(3):
         client.post("/api/documents/upload", data={"text_content": f"Material {i}"}, headers={"Authorization": f"Bearer {token}"})
     res = client.post("/api/documents/upload", data={"text_content": "Material 4"}, headers={"Authorization": f"Bearer {token}"})
@@ -222,7 +229,7 @@ def test_19_free_user_fourth_upload_blocked():
     assert "Daily upload limit reached" in res.json()["detail"]
 
 def test_20_freemium_reset_next_day():
-    _, token, user_id = create_user("free20@example.com", tier="free")
+    _, token, user_id = create_user("free20", tier="free")
     for i in range(3):
         client.post("/api/documents/upload", data={"text_content": f"Material {i}"}, headers={"Authorization": f"Bearer {token}"})
     
@@ -237,7 +244,7 @@ def test_20_freemium_reset_next_day():
     assert res.status_code == 200
 
 def test_21_pro_user_unlimited_uploads():
-    _, token, _ = create_user("pro21@example.com", tier="pro")
+    _, token, _ = create_user("pro21", tier="pro")
     for i in range(5):
         res = client.post("/api/documents/upload", data={"text_content": f"Pro Material {i}"}, headers={"Authorization": f"Bearer {token}"})
         assert res.status_code == 200
@@ -248,7 +255,7 @@ def test_21_pro_user_unlimited_uploads():
 # ==============================================================================
 
 def test_22_successful_razorpay_payment():
-    _, token, user_id = create_user("pay22@example.com", tier="free")
+    _, token, user_id = create_user("pay22", tier="free")
     order_res = client.post("/api/payments/create-order", headers={"Authorization": f"Bearer {token}"})
     order_id = order_res.json()["order_id"]
 
@@ -257,7 +264,7 @@ def test_22_successful_razorpay_payment():
         "payload": {
             "payment": {
                 "entity": {
-                    "id": "pay_test_22",
+                    "id": f"pay_test_{uuid.uuid4().hex[:6]}",
                     "order_id": order_id,
                     "notes": {"user_id": user_id}
                 }
@@ -269,13 +276,13 @@ def test_22_successful_razorpay_payment():
     assert me.json()["subscription_tier"] == "pro"
 
 def test_23_failed_payment_keeps_free_tier():
-    _, token, user_id = create_user("pay23@example.com", tier="free")
+    _, token, user_id = create_user("pay23", tier="free")
     webhook_payload = {
         "event": "payment.failed",
         "payload": {
             "payment": {
                 "entity": {
-                    "id": "pay_failed_23",
+                    "id": f"pay_failed_{uuid.uuid4().hex[:6]}",
                     "notes": {"user_id": user_id}
                 }
             }
@@ -286,7 +293,7 @@ def test_23_failed_payment_keeps_free_tier():
     assert me.json()["subscription_tier"] == "free"
 
 def test_24_webhook_replay_idempotence():
-    _, token, user_id = create_user("pay24@example.com", tier="free")
+    _, token, user_id = create_user("pay24", tier="free")
     order_res = client.post("/api/payments/create-order", headers={"Authorization": f"Bearer {token}"})
     order_id = order_res.json()["order_id"]
 
@@ -295,7 +302,7 @@ def test_24_webhook_replay_idempotence():
         "payload": {
             "payment": {
                 "entity": {
-                    "id": "pay_replay_24",
+                    "id": f"pay_replay_{uuid.uuid4().hex[:6]}",
                     "order_id": order_id,
                     "notes": {"user_id": user_id}
                 }
@@ -313,8 +320,8 @@ def test_24_webhook_replay_idempotence():
 # ==============================================================================
 
 def test_25_rag_user_multi_tenant_isolation():
-    doc_a_id = "tenant_user_a_doc"
-    doc_b_id = "tenant_user_b_doc"
+    doc_a_id = f"tenant_a_{uuid.uuid4().hex[:6]}"
+    doc_b_id = f"tenant_b_{uuid.uuid4().hex[:6]}"
     text_a = "Thermodynamics deals with heat, work, and radiation."
     text_b = "Alkanes are saturated hydrocarbons containing single C-C bonds."
 
@@ -333,8 +340,8 @@ def test_25_rag_user_multi_tenant_isolation():
     delete_document_index(doc_b_id)
 
 def test_26_rag_same_user_multi_document_isolation():
-    doc_1_id = "same_user_physics_doc"
-    doc_2_id = "same_user_biology_doc"
+    doc_1_id = f"same_user_phys_{uuid.uuid4().hex[:6]}"
+    doc_2_id = f"same_user_bio_{uuid.uuid4().hex[:6]}"
     physics_text = "Quantum Entanglement occurs when a pair of particles interact."
     biology_text = "Mitochondria are double-membrane organelles, known as powerhouse of cell."
 
